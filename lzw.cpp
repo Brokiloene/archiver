@@ -67,8 +67,8 @@ public:
                 s = cur;
             }
         }
+        fo.writeBits(compress[s], code_length);
 
-        fo.writeBits(compress[s], code_length, true);
 
         std::cout << max_code << '\n';
     }
@@ -129,7 +129,7 @@ int main(int argc, char const *argv[])
     {
         TimerGuard t;
     LZW lzw;
-    lzw.Compress("in7", "out.lzw");
+    lzw.Compress("in6", "out.lzw");
     lzw.Decompress("out.lzw", "res");
     }
 

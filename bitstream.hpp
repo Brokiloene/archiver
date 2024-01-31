@@ -10,19 +10,21 @@ struct EOFReachedException {
     
 };
 
-
 class BitStream {
 private:
     std::fstream f;
 
-    int bitsCnt = 0;
-    unsigned char temp = 0;
+    std::string mode;
+    std::deque<char> buffer;
+    int bitsAvailable = 0;
 
     const int BYTE_SIZE = 8;
+    const int BUFFER_MAX_SIZE = 16;
 
 public:
     BitStream() {}
     BitStream(std::string filename, std::string mode) {
+        this->mode = mode;
         if (mode == "w") {
             f.open(filename, std::ios::out | std::ios::trunc | std::ios::binary);
         } else if (mode == "r") {
@@ -31,88 +33,160 @@ public:
             throw std::runtime_error(std::string("BitStream incorrect mode: " + mode));
         }
     }
-    
+
+    ~BitStream() {
+        if (mode == "w" && buffer.size() != 0) {
+            flushBuffer();
+        }
+    }
+
+    void fillBuffer() {
+        char temp_buf[BUFFER_MAX_SIZE];
+        f.read(temp_buf, sizeof(temp_buf));
+        int readCnt = f.gcount();
+        for (int i = 0; i < readCnt; ++i) {
+            buffer.push_back(temp_buf[i]);
+        }
+        bitsAvailable += readCnt * BYTE_SIZE;
+        if (bitsAvailable == 0) {
+            throw EOFReachedException();
+        }
+    }
+
+    void flushBuffer() {
+        if (buffer.size() > 0) {
+            std::vector<char> v;
+            std::copy(buffer.begin(), buffer.end(), std::back_inserter(v));
+            f.write(reinterpret_cast<char*>(v.data()), v.size());
+            buffer.clear();
+            bitsAvailable = 0;
+        }
+    }
+
     uint32_t readBits(int bitsNeeded) {
         uint32_t res = 0;
+        unsigned char tmp = 0;
 
-        if (bitsCnt > bitsNeeded) {
-            for (int i = 0; i < bitsNeeded; ++i) {
-                --bitsCnt;
-
-                res <<= 1;
-                res |= (temp >> bitsCnt & 1);
-
-                temp &= ~(1 << bitsCnt);
-            }
-            bitsNeeded = 0;
-        } else {
-            res = temp;
-            bitsNeeded -= bitsCnt;
-            bitsCnt = 0;
-            temp = 0;
+        if (bitsAvailable < bitsNeeded) {
+            fillBuffer();
         }
 
-        while (bitsNeeded > 0) {
-            unsigned char c = 0;
-            
-            if (!f) {
-                throw EOFReachedException();
-            }
-            
-            f.read(reinterpret_cast<char*>(&c), sizeof(c));
+        if (bitsAvailable < bitsNeeded) {
+            throw EOFReachedException();
+        }
 
-            if (f.gcount() < sizeof(char)) {
-                throw EOFReachedException();
-            }            
-            
-            if (bitsNeeded >= BYTE_SIZE) {
-                res <<= BYTE_SIZE;
-                res += c;
-                bitsNeeded -= BYTE_SIZE;
-                continue;
-            }
+        // check if the last byte was partially used
+        if (bitsAvailable % BYTE_SIZE != 0) {
+            int bitsUnused = bitsAvailable & (BYTE_SIZE - 1);
+            tmp = buffer.front();
+            buffer.pop_front();
 
-            // it remains to set less than 8 bits 
-            bitsCnt = BYTE_SIZE;
+            if (bitsUnused > bitsNeeded) {
+                for (int i = 0; i < bitsNeeded; ++i) {
+                    --bitsUnused;
+
+                    res <<= 1;
+                    res |= (tmp >> bitsUnused & 1);
+                    tmp &= ~(1 << bitsUnused);
+                }
+                bitsAvailable -= bitsNeeded;
+                bitsNeeded = 0; 
+                buffer.push_front(tmp);
+
+            } else {
+                res += static_cast<uint32_t>(tmp);
+                bitsNeeded -= bitsUnused;
+                bitsAvailable -= bitsUnused;
+            }
+        }
+
+        while (bitsNeeded >= BYTE_SIZE) {
+            tmp = buffer.front();
+            buffer.pop_front();
+            
+            res <<= BYTE_SIZE;
+            res += static_cast<uint32_t>(tmp);
+            bitsNeeded -= BYTE_SIZE;
+            bitsAvailable -= BYTE_SIZE;
+        }
+
+        if (bitsNeeded < BYTE_SIZE && bitsNeeded > 0) {
+            tmp = buffer.front();
+            buffer.pop_front();
+            int tmpBits = BYTE_SIZE;
 
             for (int i = 0; i < bitsNeeded; ++i) {
-                --bitsCnt;
-
+                --tmpBits;
                 res <<= 1;
-                res |= (c >> bitsCnt & 1);
-
-                c &= ~(1 << bitsCnt);
+                res |= (tmp >> tmpBits & 1);
+                tmp &= ~(1 << tmpBits);
             }
-            bitsNeeded = 0;
-            temp = c;
+            
+            buffer.push_front(tmp);
+            bitsAvailable -= bitsNeeded;
         }
+
         return res;
     }
 
-    void writeBits(uint32_t val, int bits, bool fill=false) {
+    void writeBits(uint32_t val, int bits) {
+        unsigned char tmp = 0;
+        int tmpBits = 0;
+        if (bitsAvailable % BYTE_SIZE != 0) {
+            tmp = buffer.back();
+            buffer.pop_back();
+            tmpBits = bitsAvailable % BYTE_SIZE;
+
+            // fill the last char
+            if (bits <= BYTE_SIZE - tmpBits) {
+                tmp += static_cast<unsigned char> (val << (BYTE_SIZE - tmpBits - bits));
+                tmpBits = bits;
+                bits = 0;
+            } else {            
+                for (int i = 0, end = BYTE_SIZE - tmpBits; i < end; ++i) {
+                    // get i-th from msb bit value from val
+                    // set it to the non-used msb of temp
+                    tmp |= ((val >> (bits - i - 1) & 1) << (7 - tmpBits));
+                    ++tmpBits;
+
+                    if (tmpBits == BYTE_SIZE) {
+                        buffer.push_back(tmp);
+                        bitsAvailable += (i+1);
+                        bits -= (i+1);
+                    }
+                }
+                tmp = 0;
+                tmpBits = 0;
+            }
+        }
+
         for (int i = 0; i < bits; ++i) {
-            
             // get i-th from msb bit value from val
             // set it to the non-used msb of temp
-            temp |= ((val >> (bits - i - 1) & 1) << (7 - bitsCnt));
-            ++bitsCnt;
+            tmp |= ((val >> (bits - i - 1) & 1) << (7 - tmpBits));
+            ++tmpBits;
 
-            if (bitsCnt == 8) {
-                f.write(reinterpret_cast<char*>(&temp), sizeof(temp));
-                temp = 0;
-                bitsCnt = 0;
+            if (tmpBits == BYTE_SIZE) {
+                if (buffer.size() == BUFFER_MAX_SIZE) {
+                    flushBuffer();
+                }
+                buffer.push_back(tmp);
+                tmp = 0;
+                tmpBits = 0;
+                bitsAvailable += BYTE_SIZE;
             }
         }
 
         if (!f) {
-            throw EOFReachedException();
+            throw std::runtime_error("Output filestream is not available\n");
         }
 
-        // align last write to the byte size
-        if (fill && bitsCnt) {
-            f.write(reinterpret_cast<char*>(&temp), sizeof(temp));
-            temp = 0;
-            bitsCnt = 0;
+        if (tmpBits != 0) {
+            if (buffer.size() == BUFFER_MAX_SIZE) {
+                flushBuffer();
+            }
+            buffer.push_back(tmp);
+            bitsAvailable += tmpBits;
         }
     }
 };
