@@ -15,6 +15,7 @@ private:
     std::unordered_map<uint32_t, std::string> decompress;
 
     int CODE_LENGTH_MAX = 10;
+    int MAX_CODE = 1000000;
     uint32_t EOF_CODE = 256;
 
     void setBit(int num, uint32_t& c) {
@@ -66,9 +67,19 @@ public:
                 }
                 s = cur;
             }
+            // ---
+            if (max_code == MAX_CODE) {
+                fo.writeBits(compress[s], code_length);
+                s = "";
+                resetDicts();
+                max_code = 255;
+                code_length = 8;
+            }
+            // ---
         }
-        fo.writeBits(compress[s], code_length);
-
+        if (s != "") {
+            fo.writeBits(compress[s], code_length);
+        }
 
         std::cout << max_code << '\n';
     }
@@ -94,6 +105,21 @@ public:
         uint32_t curcode;
 
         while (true) {
+            // ---
+            if (max_code == MAX_CODE) {
+                code_length = 8;
+                try {
+                    prevcode = fi.readBits(code_length);
+                } catch (EOFReachedException& ex) {
+                    break;
+                }
+                fo.writeBits(decompress[prevcode][0], 8);
+                curstr = decompress[prevcode];
+                resetDicts();
+                max_code = 255;
+            }
+            // ---
+
             if (isPowerOfTwo(max_code+1)) {
                 code_length += 1;
             }
@@ -127,9 +153,9 @@ public:
 int main(int argc, char const *argv[])
 {
     {
-        TimerGuard t;
+    TimerGuard t;
     LZW lzw;
-    lzw.Compress("in6", "out.lzw");
+    lzw.Compress("in7", "out.lzw");
     lzw.Decompress("out.lzw", "res");
     }
 

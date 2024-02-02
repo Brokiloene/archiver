@@ -15,7 +15,7 @@ private:
     std::fstream f;
 
     std::string mode;
-    std::deque<char> buffer;
+    std::deque<unsigned char> buffer;
     int bitsAvailable = 0;
 
     const int BYTE_SIZE = 8;
@@ -54,7 +54,8 @@ public:
     }
 
     void flushBuffer() {
-        if (buffer.size() > 0) {
+        if (buffer.size() > 0 && bitsAvailable >= BYTE_SIZE) {
+            // int charCnt = bitsAvailable / BYTE_SIZE;
             std::vector<char> v;
             std::copy(buffer.begin(), buffer.end(), std::back_inserter(v));
             f.write(reinterpret_cast<char*>(v.data()), v.size());
