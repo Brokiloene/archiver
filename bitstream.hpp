@@ -1,10 +1,7 @@
 #include "fstream"
 #include "string"
-#include "stdexcept"
 #include "queue"
 
-#include "iostream"
-#include "bitset"
 
 struct EOFReachedException {
     
@@ -19,7 +16,8 @@ private:
     int bitsAvailable = 0;
 
     const int BYTE_SIZE = 8;
-    const int BUFFER_MAX_SIZE = 16;
+    const int MAX_SHIFT = BYTE_SIZE - 1;
+    const int BUFFER_MAX_SIZE = 131072; // 128 kb
 
 public:
     BitStream() {}
@@ -78,7 +76,7 @@ public:
 
         // check if the last byte was partially used
         if (bitsAvailable % BYTE_SIZE != 0) {
-            int bitsUnused = bitsAvailable & (BYTE_SIZE - 1);
+            int bitsUnused = bitsAvailable & (BYTE_SIZE - 1); // == bitsAvailable % BYTE_SIZE
             tmp = buffer.front();
             buffer.pop_front();
 
@@ -147,7 +145,7 @@ public:
                 for (int i = 0, end = BYTE_SIZE - tmpBits; i < end; ++i) {
                     // get i-th from msb bit value from val
                     // set it to the non-used msb of temp
-                    tmp |= ((val >> (bits - i - 1) & 1) << (7 - tmpBits));
+                    tmp |= ((val >> (bits - i - 1) & 1) << (MAX_SHIFT - tmpBits));
                     ++tmpBits;
 
                     if (tmpBits == BYTE_SIZE) {
@@ -164,7 +162,7 @@ public:
         for (int i = 0; i < bits; ++i) {
             // get i-th from msb bit value from val
             // set it to the non-used msb of temp
-            tmp |= ((val >> (bits - i - 1) & 1) << (7 - tmpBits));
+            tmp |= ((val >> (bits - i - 1) & 1) << (MAX_SHIFT - tmpBits));
             ++tmpBits;
 
             if (tmpBits == BYTE_SIZE) {
