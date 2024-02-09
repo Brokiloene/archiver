@@ -90,7 +90,7 @@ public:
             fo.writeBits(compress[s], code_length);
         }
 
-        std::cout << cur_max_code << '\n';
+        // std::cout << cur_max_code << '\n';
     }
 
     void Decompress(std::string in, std::string out) {
@@ -152,7 +152,7 @@ public:
             prevcode = curcode;
         }
 
-        std::cout << cur_max_code << '\n';
+        // std::cout << cur_max_code << '\n';
     }
 };
 
@@ -162,7 +162,7 @@ int main(int argc, char const *argv[])
     {
     TimerGuard t;
     LZW lzw;
-    lzw.Compress("../three/10mil.txt", "out.lzw");
+    lzw.Compress("in7", "out.lzw");
     lzw.Decompress("out.lzw", "res");
     }
 

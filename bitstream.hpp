@@ -188,4 +188,8 @@ public:
             bitsAvailable += tmpBits;
         }
     }
+
+    int getByte() {
+        return f.get();
+    }
 };
