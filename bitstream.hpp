@@ -1,6 +1,9 @@
+#pragma once
+
 #include "fstream"
 #include "string"
 #include "queue"
+#include "iostream"
 
 
 struct EOFReachedException {
@@ -11,6 +14,7 @@ class BitStream {
 private:
     std::fstream f;
 
+    std::string filename;
     std::string mode;
     std::deque<unsigned char> buffer;
     int bitsAvailable = 0;
@@ -23,8 +27,11 @@ public:
     BitStream() {}
     BitStream(std::string filename, std::string mode) {
         this->mode = mode;
+        this->filename = filename;
         if (mode == "w") {
-            f.open(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+            if (filename != "stdout") {
+                f.open(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+            }
         } else if (mode == "r") {
             f.open(filename, std::ios::in | std::ios::binary);
         } else {
@@ -53,10 +60,13 @@ public:
 
     void flushBuffer() {
         if (buffer.size() > 0 && bitsAvailable >= BYTE_SIZE) {
-            // int charCnt = bitsAvailable / BYTE_SIZE;
             std::vector<char> v;
             std::copy(buffer.begin(), buffer.end(), std::back_inserter(v));
-            f.write(reinterpret_cast<char*>(v.data()), v.size());
+            if (filename == "stdout") {
+                std::cout.write(reinterpret_cast<char*>(v.data()), v.size());
+            } else {
+                f.write(reinterpret_cast<char*>(v.data()), v.size());
+            }
             buffer.clear();
             bitsAvailable = 0;
         }
