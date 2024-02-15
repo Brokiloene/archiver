@@ -19,22 +19,6 @@ const int USE_BAC_BIT        = 1<<6;
 const int USE_LZW_AND_BAC_BIT= 1<<7;
 
 
-int exec(const char* cmd) {
-    std::array<char, 128> buffer;
-    std::string result;
-
-    auto pipe = popen(cmd, "r"); // get rid of shared_ptr
-
-    if (!pipe) throw std::runtime_error("popen() failed!");
-
-    while (!feof(pipe)) {
-        if (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
-            result += buffer.data();
-    }
-
-    return pclose(pipe);
-}
-
 struct IntegrityError {
 
 };
@@ -215,7 +199,7 @@ int main(int argc, char const *argv[])
 
     for (int i = 1; i < argc; ++i) {
         std::string curArg(argv[i]);
-        if (i == 1 && std::string(argv[1]).length() > 2) {
+        if (i == 1 && std::string(argv[1]).substr(0, 2) != "--") {
             int end = std::string(argv[1]).length();
             std::string flags(argv[1]);
             for (int j = 1; j < end; ++j) {
@@ -252,7 +236,7 @@ int main(int argc, char const *argv[])
             file_arg_idx = i+1;
             break;
         }
-        else if (curArg == "-c" || curArg == "--compress") {
+        else if (curArg == "-c" || curArg == "--stdout") {
             flag |= STD_OUTPUT_BIT;
         }
         else if (curArg == "-d" || curArg == "--decompress") {
